@@ -12,6 +12,7 @@ export default function ProductsGrid() {
   const [products, setProducts] = useState([]);
   const [user, setUser] = useState(auth.currentUser);
   const [likesMap, setLikesMap] = useState({}); // productId => liked?
+  const [likesCount, setLikesCount] = useState({}); // productId => total likes
 
   useEffect(() => {
     const unsubscribeAuth = auth.onAuthStateChanged((u) => setUser(u));
@@ -33,7 +34,7 @@ export default function ProductsGrid() {
     };
   }, []);
 
-  // Listen for likes for all products
+  // Listen for likes
   useEffect(() => {
     const unsubs = products.map((p) => {
       const likesCol = collection(db, "products", p.id, "likes");
@@ -42,6 +43,7 @@ export default function ProductsGrid() {
           ...prev,
           [p.id]: user ? snapshot.docs.some((d) => d.id === user.uid) : false,
         }));
+        setLikesCount((prev) => ({ ...prev, [p.id]: snapshot.docs.length }));
       });
     });
     return () => unsubs.forEach((unsub) => unsub());
@@ -49,7 +51,6 @@ export default function ProductsGrid() {
 
   const toggleLike = async (productId) => {
     if (!user) return;
-
     const likeDoc = doc(db, "products", productId, "likes", user.uid);
     if (likesMap[productId]) {
       await deleteDoc(likeDoc);
@@ -69,19 +70,26 @@ export default function ProductsGrid() {
               !p.available ? "opacity-50" : ""
             }`}
           >
-            <img
-              src={p.imageURL}
-              alt={p.name}
-              className="mb-2 w-full h-48 object-cover rounded"
-            />
-
+            {/* Sold/Available badge */}
             <div
-              className="absolute top-2 right-2 px-2 py-1 rounded text-white text-sm font-bold"
+              className="absolute top-2 left-2 px-2 py-1 rounded text-white text-sm font-bold"
               style={{ backgroundColor: p.available ? "green" : "red" }}
             >
               {p.available ? "Pieejams" : "Izpārdots"}
             </div>
 
+            {/* Holiday special badge */}
+            {p.holidaySpecial && (
+              <div className="absolute top-2 right-2 px-2 py-1 rounded bg-yellow-500 text-white text-sm font-bold">
+                Svētku piedāvājums
+              </div>
+            )}
+
+            <img
+              src={p.imageURL}
+              alt={p.name}
+              className="mb-2 w-full h-48 object-cover rounded"
+            />
             <h3 className="text-xl font-semibold">{p.name}</h3>
             <p>{p.description}</p>
             <p className="font-bold mt-2">{p.price} €</p>
@@ -96,9 +104,9 @@ export default function ProductsGrid() {
                 {likesMap[p.id] ? "Patīk" : "Like"}
               </button>
             )}
-            <p className="mt-1 text-sm">
-              {/* Optionally display total likes */}
-            </p>
+
+            {/* Total likes display */}
+            <p className="mt-1 text-sm">Patīk: {likesCount[p.id] || 0}</p>
           </div>
         ))}
       </div>

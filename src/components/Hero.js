@@ -1,3 +1,5 @@
+import React, { useState, useEffect } from "react";
+
 export default function Hero() {
   return (
     <section className="bg-green-50 text-center py-16">

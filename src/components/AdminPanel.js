@@ -1,3 +1,5 @@
+import React, { useState, useEffect } from "react";
+
 export default function AdminPanel({ user }) {
   if (!user) return null; // show only for logged-in admin
 
