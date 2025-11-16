@@ -69,7 +69,13 @@ export default function Navbar({ user }) {
   return (
     <header className="bg-green-100">
       <div className="p-3 flex items-center justify-between max-w-6xl mx-auto">
-        <h1 className="text-xl font-bold">ZanesPušķīši</h1>
+        <a href="/" className="flex items-center">
+          <img
+            src="/Zanes_Pušķīši.png"
+            alt="Zanes Pušķīši"
+            className="h-10 w-auto"
+          />
+        </a>
 
         <div className="flex items-center gap-4">
           {/* Auth actions */}
