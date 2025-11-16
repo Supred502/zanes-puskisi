@@ -1,55 +1,60 @@
-# Copilot Instructions for zanes-puskisi
+## Copilot Instructions — zanes-puskisi
 
-Concise, actionable guidance for AI coding assistants working on this Create React App + Firebase project.
+Short, actionable guidance to get an AI coding agent productive in this CRA + Firebase repo.
 
 Overview
 
-- Tech: React (CRA, React 19), Tailwind CSS, Firebase (Auth, Firestore, Storage).
-- Styling: `postcss.config.cjs` + `tailwind.config.cjs`; global styles in `src/styles/index.css`.
-- Firebase client config: `src/firebase/firebase.js`.
+- Tech: Create React App (React 19), Tailwind CSS, Firebase (Auth, Firestore, Storage).
+- Styling is Tailwind-first: `postcss.config.cjs`, `tailwind.config.cjs`, global CSS in `src/styles/index.css`.
+- Firebase client code lives in `src/firebase/firebase.js` (no server secrets in repo).
 
-Big picture & data flow
+Big picture
 
-- Entry: `src/index.js` → `src/App.js`. `App` composes `Navbar`, `Hero`, `AdminPanel`, `ProductsGrid`, `InspirationsGrid` and modals (e.g. `ProductModal`).
-- Firestore model (see `seedFirestore.js`):
-  - `products` docs: `name`, `description`, `price`, `imageURL`, `available`, `holidaySpecial`, `createdAt`.
-  - Likes: `products/{productId}/likes/{uid}` — presence of a doc = liked; count docs for total likes (`ProductsGrid.js`).
-  - `inspirations` collection used by `InspirationsGrid.js`.
-  - `comments` flat collection with `productId`, `name`, `message`, `createdAt` (`CommentsSection.js` queries by `productId`).
+- App entry: `src/index.js` → `src/App.js`. `App` composes `Navbar`, `Hero`, `AdminPanel`, `ProductsGrid`, `InspirationsGrid`, and `ProductModal`.
+- Firestore model (see `seedFirestore.js` for examples):
+  - `products` documents: fields include `name`, `description`, `price`, `imageURL`, `available`, `holidaySpecial`, `createdAt`.
+  - Likes use a subcollection: `products/{productId}/likes/{uid}` — presence of a doc means the user liked the product; UI reads snapshot counts in `ProductsGrid.js`.
+  - `comments` is a flat collection with `{ productId, name, message, createdAt }` and is queried by `productId` in `CommentsSection.js`.
+  - `inspirations` is a separate collection used by `InspirationsGrid.js`.
 
 Key files & patterns (quick map)
 
-- Firebase: `src/firebase/firebase.js` (client-side config only).
-- Products & likes: `src/components/ProductsGrid.js`, `src/components/ProductModal.js`.
-- Comments: `src/components/CommentsSection.js` (queries `comments` by `productId` ordered by `createdAt`).
-- Admin UI: `src/components/AdminPanel.js` (gated by `user` from `onAuthStateChanged`).
+- `src/firebase/firebase.js`: Firebase client init + helpers.
+- Product flow: `src/components/ProductsGrid.js`, `src/components/ProductModal.js` (likes + product details).
+- Comments: `src/components/CommentsSection.js` (query by `productId`, ordered by `createdAt`).
+- Admin UI: `src/components/AdminPanel.js` (gated by `onAuthStateChanged` user state).
 - Tests: `src/setupTests.js`, `src/components/__tests__/Navbar.test.js` (React Testing Library).
 
-Developer workflows
+Developer workflows (commands)
 
-- Dev server: `npm start` (CRA dev server at `http://localhost:3000`).
-- Tests: `npm test` (uses React Testing Library). Run after changes to affected components.
-- Build: `npm run build` → `build/` output.
-- Deploy hosting: `firebase deploy --only hosting` (run after `npm run build`).
-- Seed Firestore: `node seedFirestore.js` (edit config inside for target project).
+- Run dev server: `npm start` (CRA dev server on `http://localhost:3000`).
+- Run tests: `npm test` (watch mode); run after editing components with tests.
+- Build: `npm run build` → `build/` directory.
+- Deploy hosting: `firebase deploy --only hosting` (build first).
+- Seed Firestore locally: `node seedFirestore.js` — edit its config for your Firebase project before running.
 
-Agent-specific guidance (do this in PRs)
+Repo-specific guidance
 
-- Keep changes minimal and focused: edit one component or feature per PR.
-- Follow existing Firestore patterns: use the same collection names, subcollection likes pattern, and `createdAt` timestamps (prefer `serverTimestamp()` where appropriate).
-- Tailwind-first: prefer adding utility classes directly in JSX over adding global CSS rules.
-- Do not add server secrets or server-side admin SDK config in the repo — Firebase client keys are expected to be public.
-- If you add new dev/build dependencies, update `package.json` and explain why in the PR description.
+- Tailwind-first: prefer adding utility classes in JSX rather than new global CSS declarations.
+- Firestore patterns: preserve collection names and subcollection likes pattern. Use `serverTimestamp()` for `createdAt` where appropriate.
+- Do not add server-side secrets or Admin SDK configuration to the repo. Client Firebase keys are expected to be public and stored in `src/firebase/firebase.js`.
 
-Concrete examples for common tasks
+Concrete examples (copy/paste-ready)
 
-- Add image upload in `AdminPanel`: use `getStorage()` → upload → `getDownloadURL()` → save `imageURL` on `products` doc (see `src/firebase/firebase.js`).
-- Toggle like: create/delete doc at `products/{id}/likes/{uid}` and refresh counts from snapshot query in `ProductsGrid`.
-- Post comment: `addDoc(collection(db,'comments'), { productId, name, message, createdAt: serverTimestamp() })` and query by `productId` with `orderBy('createdAt','desc')` in `CommentsSection`.
+- Toggle like: create or delete the doc at `products/{productId}/likes/{uid}`; `ProductsGrid.js` listens to snapshots to compute counts.
+- Post comment: `addDoc(collection(db, 'comments'), { productId, name, message, createdAt: serverTimestamp() })` and query with `where('productId','==',id)` + `orderBy('createdAt','desc')`.
+- Upload image in AdminPanel: use `getStorage()` → `uploadBytes()` → `getDownloadURL()` → write `imageURL` to the `products` doc.
 
-Where to look first
+Where to start (dev flow)
 
-- Start with `src/App.js`, `src/firebase/firebase.js`, and `src/components/ProductsGrid.js` to understand product/like flow.
-- Check `seedFirestore.js` for expected document shapes.
+- Inspect `src/App.js` to see composition and which components mount by route/state.
+- Open `src/firebase/firebase.js` to understand exported helpers and initialization points.
+- Review `src/components/ProductsGrid.js` and `seedFirestore.js` to learn expected Firestore document shapes and real-time patterns.
 
-If something seems missing or inconsistent, ask for the expected behavior and I will update these instructions.
+PR & editing rules for agents
+
+- Keep changes small and focused (one feature/component per PR).
+- Match existing naming, collection structure, and `createdAt` usage — prefer server timestamps.
+- If adding dependencies, update `package.json` and note why in the PR description.
+
+If anything is unclear in these instructions or you need more examples, ask and I will expand the section with targeted snippets.
