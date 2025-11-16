@@ -107,8 +107,15 @@ export default function CommentsSection({ productId }) {
             );
             productIds.forEach(async (pid) => {
               if (!pid) return;
-              if (productNames[pid]) return;
-              setProductNames((prev) => ({ ...prev, [pid]: null }));
+              let shouldFetch = true;
+              setProductNames((prev) => {
+                if (prev[pid]) {
+                  shouldFetch = false;
+                  return prev;
+                }
+                return { ...prev, [pid]: null };
+              });
+              if (!shouldFetch) return;
               try {
                 const pDoc = await getDoc(doc(db, "products", pid));
                 setProductNames((prev) => ({
