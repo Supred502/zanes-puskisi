@@ -7,6 +7,7 @@ import {
   onSnapshot,
 } from "firebase/firestore";
 import { useState, useEffect } from "react";
+import ProductModal from "./ProductModal";
 
 export default function ProductsGrid() {
   const [products, setProducts] = useState([]);
@@ -59,57 +60,65 @@ export default function ProductsGrid() {
     }
   };
 
+  const availableProducts = products.filter((p) => p.available === true);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+
   return (
-    <section id="produkti" className="p-8">
-      <h2 className="text-3xl font-bold mb-6">Mūsu Produkti</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-        {products.map((p) => (
-          <div
-            key={p.id}
-            className={`border p-4 rounded relative ${
-              !p.available ? "opacity-50" : ""
-            }`}
-          >
-            {/* Sold/Available badge */}
-            <div
-              className="absolute top-2 left-2 px-2 py-1 rounded text-white text-sm font-bold"
-              style={{ backgroundColor: p.available ? "green" : "red" }}
-            >
-              {p.available ? "Pieejams" : "Izpārdots"}
+    <>
+      <section id="produkti" className="p-8">
+        <h2 className="text-3xl font-bold mb-6">Mūsu Produkti - Pieejami</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {availableProducts.map((p) => (
+            <div key={p.id} className="border p-4 rounded">
+              {(() => {
+                const imgSrc =
+                  p.imageURL ||
+                  (p.images && p.images.length ? p.images[0] : null);
+                if (imgSrc) {
+                  return (
+                    <div className="mb-2 w-full aspect-square rounded overflow-hidden">
+                      <img
+                        src={imgSrc}
+                        alt={p.name || "produkt"}
+                        className="w-full h-full object-cover cursor-pointer"
+                        onClick={() => setSelectedProduct(p)}
+                      />
+                    </div>
+                  );
+                }
+                return (
+                  <div className="mb-2 w-full aspect-square bg-gray-100 rounded flex items-center justify-center text-gray-400">
+                    Nav attēla
+                  </div>
+                );
+              })()}
+              <h3 className="text-xl font-semibold">{p.name}</h3>
+              <p>{p.description}</p>
+              <p className="font-bold mt-2">{p.price} €</p>
+
+              {user && (
+                <button
+                  onClick={() => toggleLike(p.id)}
+                  className={`mt-2 px-2 py-1 rounded text-white ${
+                    likesMap[p.id] ? "bg-red-500" : "bg-blue-500"
+                  }`}
+                >
+                  {likesMap[p.id] ? "Patīk" : "Like"}
+                </button>
+              )}
+
+              <p className="mt-1 text-sm">Patīk: {likesCount[p.id] || 0}</p>
             </div>
-
-            {/* Holiday special badge */}
-            {p.holidaySpecial && (
-              <div className="absolute top-2 right-2 px-2 py-1 rounded bg-yellow-500 text-white text-sm font-bold">
-                Svētku piedāvājums
-              </div>
-            )}
-
-            <img
-              src={p.imageURL}
-              alt={p.name}
-              className="mb-2 w-full h-48 object-cover rounded"
-            />
-            <h3 className="text-xl font-semibold">{p.name}</h3>
-            <p>{p.description}</p>
-            <p className="font-bold mt-2">{p.price} €</p>
-
-            {user && (
-              <button
-                onClick={() => toggleLike(p.id)}
-                className={`mt-2 px-2 py-1 rounded text-white ${
-                  likesMap[p.id] ? "bg-red-500" : "bg-blue-500"
-                }`}
-              >
-                {likesMap[p.id] ? "Patīk" : "Like"}
-              </button>
-            )}
-
-            {/* Total likes display */}
-            <p className="mt-1 text-sm">Patīk: {likesCount[p.id] || 0}</p>
-          </div>
-        ))}
-      </div>
-    </section>
+          ))}
+        </div>
+      </section>
+      {selectedProduct && (
+        <ProductModal
+          product={selectedProduct}
+          user={user}
+          onClose={() => setSelectedProduct(null)}
+        />
+      )}
+    </>
   );
 }
