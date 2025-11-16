@@ -1,10 +1,19 @@
 import React, { useState, useRef } from "react";
-import { doc, updateDoc } from "firebase/firestore";
+import {
+  doc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  getDocs,
+  query,
+  where,
+} from "firebase/firestore";
 import { db } from "../firebase/firebase";
 import {
   ref as storageRef,
   uploadBytes,
   getDownloadURL,
+  deleteObject,
 } from "firebase/storage";
 import { storage } from "../firebase/firebase";
 import CommentsSection from "./CommentsSection";
@@ -52,10 +61,72 @@ export default function ProductModal({ product, user, onClose }) {
   const handleDeleteImage = async (idx) => {
     const nextImages = images.filter((_, i) => i !== idx);
     try {
+      // attempt to delete the storage object for the removed image (best-effort)
+      try {
+        const removed = images[idx];
+        const path = getStoragePathFromUrl(removed);
+        if (path) await deleteObject(storageRef(storage, path));
+      } catch (e) {
+        // ignore
+      }
       const pRef = doc(db, "products", product.id);
       await updateDoc(pRef, { images: nextImages });
       setImages(nextImages);
       setCurrent((c) => Math.max(0, Math.min(c, nextImages.length - 1)));
+
+      // If we've removed the last image, remove the product as well (background)
+      if (nextImages.length === 0) {
+        try {
+          // close modal first to avoid watch races
+          try {
+            onClose();
+          } catch (e) {
+            /* ignore */
+          }
+        } finally {
+          // run deletion in background
+          setTimeout(async () => {
+            try {
+              // attempt to delete any images (none) and cascade delete related docs
+              // delete likes
+              try {
+                const likesSnap = await getDocs(
+                  collection(db, "products", product.id, "likes")
+                );
+                await Promise.all(
+                  likesSnap.docs.map((d) =>
+                    deleteDoc(doc(db, "products", product.id, "likes", d.id))
+                  )
+                );
+              } catch (e) {
+                /* ignore */
+              }
+              // delete comments
+              try {
+                const q = query(
+                  collection(db, "comments"),
+                  where("productId", "==", product.id)
+                );
+                const commSnap = await getDocs(q);
+                await Promise.all(
+                  commSnap.docs.map((d) => deleteDoc(doc(db, "comments", d.id)))
+                );
+              } catch (e) {
+                /* ignore */
+              }
+              // delete product
+              try {
+                await deleteDoc(doc(db, "products", product.id));
+              } catch (e) {
+                /* ignore */
+              }
+            } catch (err) {
+              // eslint-disable-next-line no-console
+              console.error("Background product delete failed", err);
+            }
+          }, 200);
+        }
+      }
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error("Failed to delete image", err);
@@ -71,6 +142,18 @@ export default function ProductModal({ product, user, onClose }) {
       const ref = storageRef(storage, path);
       await uploadBytes(ref, file);
       const url = await getDownloadURL(ref);
+      // try to delete previous image file (best-effort)
+      try {
+        const prevUrl = images[idx];
+        if (prevUrl) {
+          const prevPath = getStoragePathFromUrl(prevUrl);
+          if (prevPath) {
+            await deleteObject(storageRef(storage, prevPath));
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
       const nextImages = images.slice();
       nextImages[idx] = url;
       const pRef = doc(db, "products", product.id);
@@ -120,13 +203,88 @@ export default function ProductModal({ product, user, onClose }) {
 
   const handleDeleteAllImages = async () => {
     try {
+      // attempt to delete storage files for each image
+      if (images && images.length) {
+        await Promise.all(
+          images.map(async (url) => {
+            try {
+              const path = getStoragePathFromUrl(url);
+              if (path) await deleteObject(storageRef(storage, path));
+            } catch (e) {
+              // ignore
+            }
+          })
+        );
+      }
       const pRef = doc(db, "products", product.id);
       await updateDoc(pRef, { images: [] });
       setImages([]);
       setCurrent(0);
+
+      // After removing all images, close modal and remove product in background
+      try {
+        onClose();
+      } catch (e) {
+        /* ignore */
+      }
+      setTimeout(async () => {
+        try {
+          // delete likes
+          try {
+            const likesSnap = await getDocs(
+              collection(db, "products", product.id, "likes")
+            );
+            await Promise.all(
+              likesSnap.docs.map((d) =>
+                deleteDoc(doc(db, "products", product.id, "likes", d.id))
+              )
+            );
+          } catch (e) {
+            /* ignore */
+          }
+          // delete comments
+          try {
+            const q = query(
+              collection(db, "comments"),
+              where("productId", "==", product.id)
+            );
+            const commSnap = await getDocs(q);
+            await Promise.all(
+              commSnap.docs.map((d) => deleteDoc(doc(db, "comments", d.id)))
+            );
+          } catch (e) {
+            /* ignore */
+          }
+          // delete product
+          try {
+            await deleteDoc(doc(db, "products", product.id));
+          } catch (e) {
+            /* ignore */
+          }
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error("Background product delete failed", err);
+        }
+      }, 200);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error("Failed to delete all images", err);
+    }
+  };
+
+  // Helper: derive storage path from a Firebase download URL
+  const getStoragePathFromUrl = (url) => {
+    try {
+      const u = new URL(url);
+      // path like /v0/b/<bucket>/o/<encodedPath>
+      const m = u.pathname.match(/\/o\/(.+)$/);
+      if (m && m[1]) return decodeURIComponent(m[1]);
+      // fallback: try /o/<path> in full url
+      const o = url.match(/\/o\/([^?]+)/);
+      if (o && o[1]) return decodeURIComponent(o[1]);
+      return null;
+    } catch (e) {
+      return null;
     }
   };
 
@@ -329,20 +487,22 @@ export default function ProductModal({ product, user, onClose }) {
                     Svētku piedāvājums
                   </label>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="px-3 py-1 rounded bg-green-600 text-white"
-                  >
-                    Saglabāt
-                  </button>
-                  <button
-                    onClick={() => setEditing(false)}
-                    className="px-3 py-1 rounded bg-gray-200"
-                  >
-                    Atcelt
-                  </button>
+                <div className="flex gap-2 items-center">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSave}
+                      disabled={saving}
+                      className="px-3 py-1 rounded bg-green-600 text-white"
+                    >
+                      Saglabāt
+                    </button>
+                    <button
+                      onClick={() => setEditing(false)}
+                      className="px-3 py-1 rounded bg-gray-200"
+                    >
+                      Atcelt
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

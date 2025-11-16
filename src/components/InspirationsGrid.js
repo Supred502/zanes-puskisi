@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { db } from "../firebase/firebase";
+import { db, auth } from "../firebase/firebase";
 import ProductModal from "./ProductModal";
 
 export default function InspirationsGrid() {
@@ -55,7 +55,7 @@ export default function InspirationsGrid() {
       {selectedProduct && (
         <ProductModal
           product={selectedProduct}
-          user={null}
+          user={auth.currentUser}
           onClose={() => setSelectedProduct(null)}
         />
       )}
