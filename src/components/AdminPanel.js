@@ -35,6 +35,8 @@ function AdminPanelInner({ user }) {
     images.length > 0 &&
     !submitting;
 
+  const disabled = !canSubmit;
+
   // Track images in a ref so we can revoke remaining object URLs on unmount
   const imagesRef = useRef(images);
   useEffect(() => {
@@ -130,7 +132,11 @@ function AdminPanelInner({ user }) {
       setTiktok("");
       images.forEach((i) => URL.revokeObjectURL(i.url));
       setImages([]);
+      imagesRef.current = [];
+      if (fileInputRef.current) fileInputRef.current.value = null;
       setCurrent(0);
+      // clear success after a moment so user sees it but form is usable
+      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error("Failed to save product", err);
@@ -368,10 +374,10 @@ function AdminPanelInner({ user }) {
             <div className="mt-6">
               <button
                 type="submit"
-                disabled={!canSubmit}
-                aria-disabled={!canSubmit}
+                disabled={disabled}
+                aria-disabled={disabled}
                 className={`w-full py-3 rounded text-lg ${
-                  canSubmit
+                  !disabled
                     ? "bg-green-600 text-white"
                     : "bg-gray-200 text-gray-600 cursor-not-allowed"
                 }`}

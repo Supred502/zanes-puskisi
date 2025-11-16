@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "zanes-puskisi-web"
-  }
+    "default": "zanes-puskisi-web",
+    "Web": "zanes-puskisi-web"
+  },
+  "targets": {},
+  "etags": {}
 }

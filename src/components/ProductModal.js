@@ -30,6 +30,9 @@ export default function ProductModal({ product, user, onClose }) {
   const [images, setImages] = useState(product?.images || []);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef(null);
+  const [pendingConfirm, setPendingConfirm] = useState(null);
+
+  // pendingConfirm: null or { type: 'single'|'all', idx?: number }
 
   if (!product) return null;
 
@@ -60,6 +63,16 @@ export default function ProductModal({ product, user, onClose }) {
 
   const handleDeleteImage = async (idx) => {
     const nextImages = images.filter((_, i) => i !== idx);
+    // If removing this image will leave zero images, show styled confirmation
+    if (nextImages.length === 0) {
+      setPendingConfirm({ type: "single", idx });
+      return;
+    }
+    // otherwise perform immediately
+    await performDeleteImage(idx);
+  };
+
+  const performDeleteImage = async (idx) => {
     try {
       // attempt to delete the storage object for the removed image (best-effort)
       try {
@@ -69,6 +82,7 @@ export default function ProductModal({ product, user, onClose }) {
       } catch (e) {
         // ignore
       }
+      const nextImages = images.filter((_, i) => i !== idx);
       const pRef = doc(db, "products", product.id);
       await updateDoc(pRef, { images: nextImages });
       setImages(nextImages);
@@ -87,7 +101,6 @@ export default function ProductModal({ product, user, onClose }) {
           // run deletion in background
           setTimeout(async () => {
             try {
-              // attempt to delete any images (none) and cascade delete related docs
               // delete likes
               try {
                 const likesSnap = await getDocs(
@@ -202,6 +215,11 @@ export default function ProductModal({ product, user, onClose }) {
   };
 
   const handleDeleteAllImages = async () => {
+    // show styled confirmation before removing all images
+    setPendingConfirm({ type: "all" });
+  };
+
+  const performDeleteAllImages = async () => {
     try {
       // attempt to delete storage files for each image
       if (images && images.length) {
@@ -288,6 +306,19 @@ export default function ProductModal({ product, user, onClose }) {
     }
   };
 
+  // Confirmation dialog actions
+  const confirmCancel = () => setPendingConfirm(null);
+  const confirmProceed = async () => {
+    if (!pendingConfirm) return;
+    const p = pendingConfirm;
+    setPendingConfirm(null);
+    if (p.type === "single") {
+      await performDeleteImage(p.idx);
+    } else if (p.type === "all") {
+      await performDeleteAllImages();
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="bg-white w-11/12 max-w-4xl max-h-[90vh] overflow-auto rounded">
@@ -361,7 +392,7 @@ export default function ProductModal({ product, user, onClose }) {
               />
               <label
                 htmlFor="add-files"
-                className="px-3 py-1 rounded bg-green-200 cursor-pointer"
+                className="px-3 py-1 rounded bg-green-200 cursor-pointer inline-flex items-center justify-center text-center"
               >
                 Pievienot attēlu
               </label>
@@ -510,6 +541,36 @@ export default function ProductModal({ product, user, onClose }) {
         </div>
 
         <div className="px-4 pb-6">
+          {pendingConfirm && (
+            <div className="fixed inset-0 z-60 flex items-center justify-center">
+              <div
+                className="absolute inset-0 bg-black/40"
+                onClick={confirmCancel}
+              />
+              <div className="relative bg-white rounded shadow-lg w-11/12 max-w-md p-4 z-70">
+                <h4 className="font-semibold text-lg mb-2">Apstiprināt</h4>
+                <p className="text-sm text-gray-700 mb-4">
+                  {pendingConfirm.type === "single"
+                    ? "Pēdējā attēla noņemšana dzēsīs arī produktu. Turpināt?"
+                    : "Noņemt visus attēlus? Tas dzēsīs produktu. Turpināt?"}
+                </p>
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={confirmCancel}
+                    className="px-3 py-1 rounded bg-gray-200"
+                  >
+                    Atcelt
+                  </button>
+                  <button
+                    onClick={confirmProceed}
+                    className="px-3 py-1 rounded bg-red-500 text-white"
+                  >
+                    Dzēst
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           <CommentsSection productId={product.id} />
         </div>
       </div>
