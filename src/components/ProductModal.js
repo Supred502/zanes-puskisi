@@ -117,12 +117,13 @@ export default function ProductModal({ product, user, onClose }) {
               // delete comments
               try {
                 const q = query(
-                  collection(db, "comments"),
-                  where("productId", "==", product.id)
+                  collection(db, "products", product.id, "comments")
                 );
                 const commSnap = await getDocs(q);
                 await Promise.all(
-                  commSnap.docs.map((d) => deleteDoc(doc(db, "comments", d.id)))
+                  commSnap.docs.map((d) =>
+                    deleteDoc(doc(db, "products", product.id, "comments", d.id))
+                  )
                 );
               } catch (e) {
                 /* ignore */
@@ -262,13 +263,12 @@ export default function ProductModal({ product, user, onClose }) {
           }
           // delete comments
           try {
-            const q = query(
-              collection(db, "comments"),
-              where("productId", "==", product.id)
-            );
+            const q = query(collection(db, "products", product.id, "comments"));
             const commSnap = await getDocs(q);
             await Promise.all(
-              commSnap.docs.map((d) => deleteDoc(doc(db, "comments", d.id)))
+              commSnap.docs.map((d) =>
+                deleteDoc(doc(db, "products", product.id, "comments", d.id))
+              )
             );
           } catch (e) {
             /* ignore */
