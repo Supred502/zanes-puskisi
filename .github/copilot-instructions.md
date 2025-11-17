@@ -2,65 +2,70 @@
 
 # Copilot Instructions — zanes-puskisi
 
-Short, actionable guide to get an AI coding agent productive in this CRA + Firebase repository.
+Short, actionable guide to get an AI coding agent productive in this CRA + Firebase repo.
 
 **Overview**
 
 - **Tech**: Create React App (React 19), Tailwind CSS, Firebase (Auth, Firestore, Storage).
-- **Styling**: Tailwind-first; global utilities live in `src/styles/index.css` and `index.css`.
-- **Firebase helpers**: `src/firebase/firebase.js` (client SDK only; no secrets here).
+- **Styling**: Tailwind-first; global utilities are in `src/styles/index.css` and `src/index.css`.
+- **Firebase helpers**: `src/firebase/firebase.js` exports `auth`, `db`, `storage`, `googleProvider` (client SDK only — no secrets in repo).
 
-**Big Picture**
+**Big picture & architecture**
 
-- **App entry**: `src/index.js` → `src/App.js` composes `Navbar`, `Hero`, `AdminPanel`, `ProductsGrid`, `InspirationsGrid`, `ProductModal`.
-- **Data flow**: `ProductsGrid` subscribes to `products` docs and the `products/{id}/likes` subcollection (snapshot listeners drive UI counts).
-- **Comments**: stored in a flat `comments` collection and queried by `productId` in `CommentsSection.js`.
+- Single-page React app: `src/index.js` → `src/App.js` composes `Navbar`, `Hero`, `AdminPanel`, `ProductsGrid`, `InspirationsGrid`, `ProductModal`.
+- Firestore is the primary data source: UI uses realtime snapshot listeners (`onSnapshot`) to drive product lists and like counts.
+- Storage holds product images; `AdminPanel` uploads files then writes `imageURL` or `images` arrays into `products` docs.
 
-**Firestore model (discoverable patterns)**
+**Firestore data model (practical patterns)**
 
-- **`products`** docs: fields include `name`, `description`, `price`, `imageURL`, `available`, `holidaySpecial`, `createdAt`.
-- **Likes**: per-user docs under `products/{productId}/likes/{uid}` — the UI treats a doc’s existence as a like. Count is done via snapshots of that subcollection.
-- **Comments**: top-level `comments` collection with docs `{ productId, name, message, createdAt }`.
-- **Inspirations**: separate `inspirations` collection used by the inspirations grid.
+- `products` documents: `{ name, description, price, imageURL, images, available, holidaySpecial, createdAt }`.
+- Likes: per-user docs under `products/{productId}/likes/{uid}` — existence = liked. UI counts via snapshot listeners. `ProductsGrid` uses a `collectionGroup('likes')` listener to aggregate counts efficiently.
+- Comments: top-level `comments` collection with `{ productId, name, message, createdAt }` and queried by `productId` in `CommentsSection.js`.
+- `inspirations` collection stores static inspiration items shown in `InspirationsGrid.js`.
 
 **Key files to inspect (quick map)**
 
-- **Firebase & seeding**: `src/firebase/firebase.js`, `seedFirestore.js` (seed example docs; update config at top before running).
-- **Realtime UI**: `src/components/ProductsGrid.js` (listening + like toggle logic).
-- **Detail + comments**: `src/components/ProductModal.js`, `src/components/CommentsSection.js`.
-- **Admin uploads**: `src/components/AdminPanel.js` (uses `getStorage()`, `uploadBytes()`, `getDownloadURL()` then writes `imageURL` to a `products` doc).
-- **Styling pipeline**: `tailwind.config.cjs`, `postcss.config.cjs`, and `src/styles/index.css`.
+- `src/firebase/firebase.js` — Firebase app + exports.
+- `seedFirestore.js` — example seeding script (edit the config before running).
+- `src/components/ProductsGrid.js` — realtime listeners for `products` and a `collectionGroup('likes')` optimization; toggles likes with `setDoc`/`deleteDoc`.
+- `src/components/AdminPanel.js` — image upload flow (`uploadBytes` → `getDownloadURL`) then `addDoc(collection(db,'products'), {...})`.
+- `src/components/ProductModal.js`, `src/components/CommentsSection.js` — comment posting / querying patterns.
 
-**Developer workflows & commands**
+**Developer workflows & common commands**
 
-- **Dev server**: `npm start` — CRA dev server at `http://localhost:3000`.
-- **Tests**: `npm test` (watch mode). Tests are under `src/components/__tests__`.
-- **Build**: `npm run build` → output in `build/` (served by Firebase Hosting for deployments).
-- **Deploy**: `firebase deploy --only hosting` (run `npm run build` first).
-- **Local seed**: `node seedFirestore.js` (edit the config variables at the top to point to your project).
+- Dev server: `npm start` (CRA dev server at `http://localhost:3000`).
+- Tests: `npm test` (watch mode). Tests live under `src/components/__tests__` if present.
+- Build: `npm run build` → `build/` directory.
+- Deploy: `firebase deploy --only hosting` (run `npm run build` first).
+- Seed Firestore locally: `node seedFirestore.js` after replacing the config keys in that file.
 
-**Project conventions & guardrails (strictly observable in code)**
+**Project-specific conventions & guardrails**
 
-- **Tailwind-first**: prefer JSX utility classes over adding global CSS.
-- **Schema stability**: do not rename collections or change the `likes` subcollection pattern without approval — many components rely on these exact names.
-- **Use server timestamps**: writing `createdAt` uses `serverTimestamp()` throughout the codebase.
-- **Auth gating**: `AdminPanel` expects client-side auth (`onAuthStateChanged`); never embed admin credentials in source.
+- Tailwind-first: prefer inline utility classes in JSX; avoid adding global CSS unless necessary.
+- Do not rename collections or the `likes` subcollection pattern — many components rely on exact names.
+- Use `serverTimestamp()` for `createdAt` on writes (used throughout code).
+- `AdminPanel` is client-auth gated (`onAuthStateChanged`); do not commit admin credentials.
 
-**Common code snippets & patterns (copyable examples)**
+**Common code snippets & copyable patterns**
 
-- **Post a comment**: `addDoc(collection(db, 'comments'), { productId, name, message, createdAt: serverTimestamp() })`.
-- **Toggle like**: create/delete `doc(db, 'products', id, 'likes', uid)`; UI counts via `onSnapshot` on the likes subcollection (see `ProductsGrid.js`).
-- **Upload image**: `getStorage()` → `uploadBytes()` → `getDownloadURL()` → update `products` doc with `imageURL` (see `AdminPanel.js`).
+- Post a comment:
+  `addDoc(collection(db, 'comments'), { productId, name, message, createdAt: serverTimestamp() })`
+- Toggle like (ProductsGrid):
+  `const likeDoc = doc(db, 'products', productId, uid); await setDoc(likeDoc, { liked: true })` or `await deleteDoc(likeDoc)`
+- Upload images (AdminPanel):
+  `uploadBytes(ref, file).then(() => getDownloadURL(ref))` then write `images` or `imageURL` into the `products` doc.
 
-**Where to start (fast path)**
+**Where to start (fast path for edits or features)**
 
-- Open `src/App.js`, follow imports into `src/components/*` to see UI composition.
-- Inspect `src/firebase/firebase.js` to understand how Firebase is initialized and which helpers are available.
-- Study `src/components/ProductsGrid.js` and `src/components/AdminPanel.js` to learn realtime listeners and the upload flow.
+- Open `src/App.js` to see UI composition.
+- Inspect `src/firebase/firebase.js` for exported helpers.
+- For feed & likes behavior, study `src/components/ProductsGrid.js` (collectionGroup usage + defensive error handling comments).
+- For uploads and form behavior, study `src/components/AdminPanel.js` (objectURL lifecycle, Promise.all uploads, form resets).
 
-**When to ask for help or expand these instructions**
+**If you need more**
 
-- If you need CI/test commands, or a local emulator setup (Firestore/Auth/Storage), ask and we’ll add exact `firebase emulators:start` instructions and env config steps.
-- If you want code examples for migrating schema or adding server-side logic, request a scoped design first (changes to schema require careful coordination).
+- For emulator guidance or CI/test automation, ask and we will add `firebase emulators:start` steps and CI snippets.
+- For a PR checklist or more examples, tell me which area to expand.
 
-If anything above seems incomplete or you want extra examples (emulator steps, narrower test commands, or a PR checklist), tell me which area to expand.
+——
+If any section is unclear or you want alternate formatting (short quick-reference or longer walkthrough), tell me which area to expand.
