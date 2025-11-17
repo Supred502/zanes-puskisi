@@ -1,68 +1,65 @@
+
 ## Copilot Instructions — zanes-puskisi
 
-Short, actionable guidance to get an AI coding agent productive in this CRA + Firebase repo.
+Short, actionable guide to get an AI coding agent productive in this CRA + Firebase repo.
 
 Overview
 
 - Tech: Create React App (React 19), Tailwind CSS, Firebase (Auth, Firestore, Storage).
-- Styling is Tailwind-first: `postcss.config.cjs`, `tailwind.config.cjs`, global CSS in `src/styles/index.css`.
-- Firebase client code and helpers live in `src/firebase/firebase.js` (no server secrets in repo).
+- Styling is Tailwind-first; global utilities in `src/styles/index.css`.
+- Firebase client code and helpers: `src/firebase/firebase.js` (no secrets here).
 
 Big picture
 
-- App entry: `src/index.js` → `src/App.js`. `App` composes `Navbar`, `Hero`, `AdminPanel`, `ProductsGrid`, `InspirationsGrid`, and `ProductModal`.
-- Data flows:
-  - `ProductsGrid.js` uses Firestore realtime listeners to show product data and counts from the `products/{id}/likes` subcollection.
-  - Comments are stored in a flat `comments` collection and queried by `productId` in `CommentsSection.js`.
-  - `AdminPanel.js` performs image uploads (Firebase Storage) and writes `imageURL` to `products` docs.
+- App entry: `src/index.js` → `src/App.js`. Main composed parts: `Navbar`, `Hero`, `AdminPanel`, `ProductsGrid`, `InspirationsGrid`, `ProductModal`.
+- Realtime data: `ProductsGrid` listens to `products` docs and the `products/{id}/likes` subcollection for like counts.
+- Comments are stored in a flat `comments` collection and queried by `productId` (see `CommentsSection.js`).
 
-Firestore model (see `seedFirestore.js` for examples)
+Firestore model (quick)
 
-- `products` documents: `name`, `description`, `price`, `imageURL`, `available`, `holidaySpecial`, `createdAt`.
-- Likes: `products/{productId}/likes/{uid}` — a document's existence indicates a like; UI counts via snapshot listeners.
-- Comments: flat collection `{ productId, name, message, createdAt }`, queried with `where('productId','==', id)` + `orderBy('createdAt','desc')`.
+- `products` doc fields: `name, description, price, imageURL, available, holidaySpecial, createdAt`.
+- Likes: `products/{productId}/likes/{uid}` — presence = liked (UI counts via snapshot).
+- Comments: collection `comments` documents: `{ productId, name, message, createdAt }`.
 - `inspirations`: separate collection used by `InspirationsGrid.js`.
 
-Key files & patterns
+Key files to inspect
 
-- `src/firebase/firebase.js`: initialization and small helpers used across components.
-- `src/components/ProductsGrid.js`: real-time product listing, likes handling, listens to subcollection snapshots.
-- `src/components/ProductModal.js`: product details + comments hook-up.
-- `src/components/CommentsSection.js`: reads/writes `comments` collection and shows recent messages.
-- `src/components/AdminPanel.js`: guarded by `onAuthStateChanged`, handles uploads via `getStorage()`.
+- `src/firebase/firebase.js` — init + helpers used across components.
+- `src/components/ProductsGrid.js` — realtime listing + like toggle pattern.
+- `src/components/ProductModal.js` & `CommentsSection.js` — product detail + comment reads/writes.
+- `src/components/AdminPanel.js` — auth-guarded uploads (uses `getStorage()`, `uploadBytes`, `getDownloadURL`).
+- `seedFirestore.js` — example documents you can use to seed Firestore locally.
 
-Developer workflows (commands)
+Developer workflows
 
 - Start dev server: `npm start` (CRA dev server at `http://localhost:3000`).
-- Run tests: `npm test` (watch mode). Use after editing components with tests.
-- Build for deployment: `npm run build` → `build/` directory.
-- Deploy hosting: `firebase deploy --only hosting` (run `npm run build` first).
-- Seed Firestore locally: `node seedFirestore.js` — update config inside that file to point to your Firebase project.
+- Run tests: `npm test` (watch mode). Tests live under `src/components/__tests__`.
+- Build: `npm run build` → `build/`.
+- Deploy hosting: `firebase deploy --only hosting` (build first).
+- Local seed: `node seedFirestore.js` — update the config at top of that file to point to your Firebase project.
 
-Project-specific conventions
+Project conventions & guardrails
 
-- Tailwind-first: prefer adding utility classes in JSX components rather than creating new global CSS rules. See `src/styles/index.css` for base utilities.
-- Firestore naming: preserve `products`, `inspirations`, `comments`, and the `products/{id}/likes` subcollection pattern.
-- Timestamps: use `serverTimestamp()` for `createdAt` when writing documents.
-- Auth gating: `AdminPanel.js` relies on `onAuthStateChanged` — avoid bypassing client auth checks in UI-only logic.
+- Tailwind-first: prefer utility classes in JSX, not new global CSS unless necessary.
+- Preserve Firestore schema & collection names; do not change `products`, `comments`, `inspirations`, or the `likes` subcollection without approval.
+- Use `serverTimestamp()` for `createdAt` when writing documents.
+- `AdminPanel` is client‑auth gated (`onAuthStateChanged`). Don’t hardcode or commit admin credentials.
 
-Concrete examples (copy/paste-ready)
+Common code snippets
 
-- Toggle like (create/delete doc): see `src/components/ProductsGrid.js` for implementation pattern.
 - Post comment: `addDoc(collection(db, 'comments'), { productId, name, message, createdAt: serverTimestamp() })`.
-- Upload image flow: `getStorage()` → `uploadBytes()` → `getDownloadURL()` → set `imageURL` on the `products` doc (see `AdminPanel.js`).
+- Like toggle: create/delete `doc(db, 'products', id, 'likes', uid)` — see `ProductsGrid.js` for exact pattern.
+- Upload flow: `getStorage()` → `uploadBytes()` → `getDownloadURL()` → write `imageURL` to `products` doc.
 
-Agent rules and PR guidance
+Agent rules
 
-- Keep changes small and focused (one feature/component per PR).
-- Preserve collection names and realtime patterns; don't refactor Firestore schema without explicit human approval.
-- If you add dependencies, add them to `package.json` and briefly explain why in the PR body.
-- Do not add server-side secrets or Admin SDK credentials to the repo; client Firebase config belongs in `src/firebase/firebase.js`.
+- Keep changes small and focused (one feature per PR). Add dependency entries to `package.json` with rationale.
+- Never add server-side secrets or Admin SDK credentials to the repo.
 
-Where to start
+Where to start (fast path)
 
-- Read `src/App.js` for component composition and mounting order.
-- Open `src/firebase/firebase.js` to see how Firestore and Storage are initialized.
-- Inspect `src/components/ProductsGrid.js` and `seedFirestore.js` to understand expected document shapes and listeners.
+- Open `src/App.js` → follow imports to `src/components/*` to understand UI composition.
+- Inspect `src/firebase/firebase.js` for initialization details.
+- Read `src/components/ProductsGrid.js` and `src/components/AdminPanel.js` to learn realtime + upload patterns.
 
-If anything is unclear or you want more examples/snippets, tell me which area to expand (tests, CI, or data seeding) and I will extend this file.
+If anything is missing or you want the instructions tuned for tests/CI/seeding, tell me which area to expand.

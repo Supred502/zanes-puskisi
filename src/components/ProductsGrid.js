@@ -1,6 +1,7 @@
 import { db, auth } from "../firebase/firebase";
 import {
   collection,
+  collectionGroup,
   doc,
   setDoc,
   deleteDoc,
@@ -26,6 +27,12 @@ export default function ProductsGrid() {
           ...doc.data(),
         }));
         setProducts(items);
+      },
+      (err) => {
+        // Handle permission/index errors gracefully in UI during development
+        // eslint-disable-next-line no-console
+        console.warn("Products listener error:", err);
+        setProducts([]);
       }
     );
 
@@ -37,26 +44,56 @@ export default function ProductsGrid() {
 
   // Listen for likes
   useEffect(() => {
-    const unsubs = products.map((p) => {
-      const likesCol = collection(db, "products", p.id, "likes");
-      return onSnapshot(likesCol, (snapshot) => {
-        setLikesMap((prev) => ({
-          ...prev,
-          [p.id]: user ? snapshot.docs.some((d) => d.id === user.uid) : false,
-        }));
-        setLikesCount((prev) => ({ ...prev, [p.id]: snapshot.docs.length }));
-      });
-    });
-    return () => unsubs.forEach((unsub) => unsub());
+    // Use a single collectionGroup listener for all `likes` subcollections.
+    // This reduces the number of watch targets and avoids creating/tearing
+    // down many listeners when `products` changes rapidly (can trigger
+    // internal Firestore assertion errors in some SDK versions).
+    const likesQuery = collectionGroup(db, "likes");
+    const unsubscribe = onSnapshot(
+      likesQuery,
+      (snapshot) => {
+        const counts = {};
+        const map = {};
+        snapshot.docs.forEach((d) => {
+          const likesRef = d.ref; // products/{productId}/likes/{uid}
+          const productRef = likesRef.parent.parent; // products/{productId}
+          if (!productRef) return;
+          const pid = productRef.id;
+          counts[pid] = (counts[pid] || 0) + 1;
+          if (user && d.id === user.uid) map[pid] = true;
+        });
+
+        // Ensure all visible products have entries (0 or false)
+        products.forEach((p) => {
+          if (!(p.id in counts)) counts[p.id] = 0;
+          if (!(p.id in map)) map[p.id] = false;
+        });
+
+        setLikesCount(counts);
+        setLikesMap(map);
+      },
+      (err) => {
+        // eslint-disable-next-line no-console
+        console.warn("Likes listener error:", err);
+        // Keep previous counts/maps rather than throwing.
+      }
+    );
+
+    return () => unsubscribe();
   }, [products, user]);
 
   const toggleLike = async (productId) => {
     if (!user) return;
     const likeDoc = doc(db, "products", productId, "likes", user.uid);
-    if (likesMap[productId]) {
-      await deleteDoc(likeDoc);
-    } else {
-      await setDoc(likeDoc, { liked: true });
+    try {
+      if (likesMap[productId]) {
+        await deleteDoc(likeDoc);
+      } else {
+        await setDoc(likeDoc, { liked: true });
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("Error toggling like:", err);
     }
   };
 
