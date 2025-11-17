@@ -2,70 +2,55 @@
 
 # Copilot Instructions — zanes-puskisi
 
-Short, actionable guide to get an AI coding agent productive in this CRA + Firebase repo.
+Concise, actionable notes to get an AI coding agent productive in this CRA + Firebase app.
 
-**Overview**
+Overview
 
-- **Tech**: Create React App (React 19), Tailwind CSS, Firebase (Auth, Firestore, Storage).
-- **Styling**: Tailwind-first; global utilities are in `src/styles/index.css` and `src/index.css`.
-- **Firebase helpers**: `src/firebase/firebase.js` exports `auth`, `db`, `storage`, `googleProvider` (client SDK only — no secrets in repo).
+- Tech stack: Create React App (React 19), Tailwind CSS, Firebase (v12+ modular SDK: Auth, Firestore, Storage).
+- Key exports: `src/firebase/firebase.js` exports `auth`, `db`, `storage`, `googleProvider`.
 
-**Big picture & architecture**
+Big picture
 
 - Single-page React app: `src/index.js` → `src/App.js` composes `Navbar`, `Hero`, `AdminPanel`, `ProductsGrid`, `InspirationsGrid`, `ProductModal`.
-- Firestore is the primary data source: UI uses realtime snapshot listeners (`onSnapshot`) to drive product lists and like counts.
-- Storage holds product images; `AdminPanel` uploads files then writes `imageURL` or `images` arrays into `products` docs.
+- Firestore is the source of truth; UI uses realtime `onSnapshot` listeners (see `ProductsGrid`, `CommentsSection`).
+- Storage stores product images; uploads use `uploadBytes` → `getDownloadURL` and write `images` array into `products` docs.
 
-**Firestore data model (practical patterns)**
+Data model & important patterns
 
-- `products` documents: `{ name, description, price, imageURL, images, available, holidaySpecial, createdAt }`.
-- Likes: per-user docs under `products/{productId}/likes/{uid}` — existence = liked. UI counts via snapshot listeners. `ProductsGrid` uses a `collectionGroup('likes')` listener to aggregate counts efficiently.
-- Comments: top-level `comments` collection with `{ productId, name, message, createdAt }` and queried by `productId` in `CommentsSection.js`.
-- `inspirations` collection stores static inspiration items shown in `InspirationsGrid.js`.
+- `products` documents: { name, description, price, images, imageURL?, available, holidaySpecial, tiktokLink, createdAt }.
+- Likes: stored as a per-product subcollection `products/{productId}/likes/{uid}` (doc existence = liked). `ProductsGrid` uses a single `collectionGroup('likes')` listener to aggregate counts — do not replace with many per-product listeners.
+- Comments: UI reads/writes comments under `products/{productId}/comments` (see `src/components/CommentsSection.js`). Note: `seedFirestore.js` contains a demo top-level `comments` collection — if you use that script, adapt comments to product-specific paths.
+- `inspirations` is a separate collection used by `InspirationsGrid`.
 
-**Key files to inspect (quick map)**
+Code conventions & gotchas
 
-- `src/firebase/firebase.js` — Firebase app + exports.
-- `seedFirestore.js` — example seeding script (edit the config before running).
-- `src/components/ProductsGrid.js` — realtime listeners for `products` and a `collectionGroup('likes')` optimization; toggles likes with `setDoc`/`deleteDoc`.
-- `src/components/AdminPanel.js` — image upload flow (`uploadBytes` → `getDownloadURL`) then `addDoc(collection(db,'products'), {...})`.
-- `src/components/ProductModal.js`, `src/components/CommentsSection.js` — comment posting / querying patterns.
+- Use Firebase modular APIs (import from `firebase/firestore`, `firebase/storage`, etc.).
+- Use `serverTimestamp()` for `createdAt` when writing documents.
+- Admin flows require auth: `AdminPanel` renders only for signed-in users (use `auth.onAuthStateChanged`).
+- Image handling: UI uses `URL.createObjectURL` for previews — code revokes object URLs on unmount (see `AdminPanel.js`). Preserve that lifecycle when modifying image upload UI.
+- Product deletion: `ProductModal` may delete storage objects and then delete product, likes, and comments in background — be careful when changing deletion logic to avoid orphaned likes/comments.
 
-**Developer workflows & common commands**
+Developer workflows
 
 - Dev server: `npm start` (CRA dev server at `http://localhost:3000`).
-- Tests: `npm test` (watch mode). Tests live under `src/components/__tests__` if present.
+- Tests: `npm test` (watch mode). There are no heavy test suites by default.
 - Build: `npm run build` → `build/` directory.
-- Deploy: `firebase deploy --only hosting` (run `npm run build` first).
-- Seed Firestore locally: `node seedFirestore.js` after replacing the config keys in that file.
+- Deploy hosting: `firebase deploy --only hosting` (run `npm run build` first).
+- Seed Firestore: `node seedFirestore.js` — update the `firebaseConfig` in that file before running (it contains example keys). When seeding, prefer creating product documents first, then write comments to `products/{productId}/comments` if you want the UI to display them.
 
-**Project-specific conventions & guardrails**
+Key files to inspect (fast map)
 
-- Tailwind-first: prefer inline utility classes in JSX; avoid adding global CSS unless necessary.
-- Do not rename collections or the `likes` subcollection pattern — many components rely on exact names.
-- Use `serverTimestamp()` for `createdAt` on writes (used throughout code).
-- `AdminPanel` is client-auth gated (`onAuthStateChanged`); do not commit admin credentials.
+- `src/firebase/firebase.js` — firebase initialization and exports.
+- `src/components/ProductsGrid.js` — product list + likes aggregation; shows why `collectionGroup('likes')` is used.
+- `src/components/AdminPanel.js` — image upload flow, object URL management, `addDoc(collection(db,'products'), ...)`.
+- `src/components/ProductModal.js` — editing, replacing/deleting images, background cleanup of likes/comments.
+- `src/components/CommentsSection.js` — reads/writes `products/{productId}/comments` and handles Google sign-in.
+- `seedFirestore.js` — example seeding script (adjust paths/config before using).
 
-**Common code snippets & copyable patterns**
+When editing or adding features
 
-- Post a comment:
-  `addDoc(collection(db, 'comments'), { productId, name, message, createdAt: serverTimestamp() })`
-- Toggle like (ProductsGrid):
-  `const likeDoc = doc(db, 'products', productId, uid); await setDoc(likeDoc, { liked: true })` or `await deleteDoc(likeDoc)`
-- Upload images (AdminPanel):
-  `uploadBytes(ref, file).then(() => getDownloadURL(ref))` then write `images` or `imageURL` into the `products` doc.
+- Do not rename collections or the `likes` subcollection pattern; many components depend on exact paths.
+- Prefer a single `collectionGroup('likes')` listener for likes aggregation to avoid many watch targets.
+- If changing upload storage paths, keep `getStoragePathFromUrl` logic in sync (used to best-effort delete storage objects by URL).
 
-**Where to start (fast path for edits or features)**
-
-- Open `src/App.js` to see UI composition.
-- Inspect `src/firebase/firebase.js` for exported helpers.
-- For feed & likes behavior, study `src/components/ProductsGrid.js` (collectionGroup usage + defensive error handling comments).
-- For uploads and form behavior, study `src/components/AdminPanel.js` (objectURL lifecycle, Promise.all uploads, form resets).
-
-**If you need more**
-
-- For emulator guidance or CI/test automation, ask and we will add `firebase emulators:start` steps and CI snippets.
-- For a PR checklist or more examples, tell me which area to expand.
-
-——
-If any section is unclear or you want alternate formatting (short quick-reference or longer walkthrough), tell me which area to expand.
+If anything is unclear or you want a shorter quick-reference or a longer walkthrough (emulator setup, CI, PR checklist), tell me which area to expand.
